@@ -183,7 +183,7 @@ void MainWindow::rstrip( std::string& target, const std::string& chars )
     }
 }
 
-void MainWindow::readConfigs( std::filesystem::path& file_path, std::filesystem::path& db_data_path, std::filesystem::path& db_hashes_path )
+void MainWindow::readConfigs( std::filesystem::path& file_path )
 {
     // read the whole file
     std::string content;
@@ -226,7 +226,7 @@ void MainWindow::readConfigs( std::filesystem::path& file_path, std::filesystem:
                 this->rstrip( aux_, "/" );
                 if ( aux_.size() > 0 ) {
                     d_found = true;
-                    db_data_path = aux_ + "/collection.db";
+                    this->db_data_path = aux_ + "/collection.db";
                 }
 
             } else if ( var == "DatabaseHashesPath" ) {
@@ -234,7 +234,7 @@ void MainWindow::readConfigs( std::filesystem::path& file_path, std::filesystem:
                 this->rstrip( aux_, "/" );
                 if ( aux_.size() > 0 ) {
                     h_found = true;
-                    db_hashes_path = aux_ + "/hashes.db";
+                    this->db_hashes_path = aux_ + "/hashes.db";
                 }
             }
 
@@ -331,6 +331,11 @@ void MainWindow::on_button_Uninstall_clicked()
     }
 }
 
+
+
+////////////////////////
+//// UNINSTALLATION ////
+////////////////////////
 void MainWindow::startUninstalling()
 {
     this->uninstalling = true;
@@ -359,247 +364,34 @@ void MainWindow::checkUninstallProgress()
 void MainWindow::Uninstall()
 {
     bool ok = true;
-    std::error_code err;
 
-    if ( this->OS != 3 ) { // mac .app contains it
-        this->ui->progressBar_Uninstall->setValue( 0 );
-        this->ui->label_Uninstall_Info->setText( MainWindow::tr( "Removing the menu entry ..." ) );
-        // remove the menu entry
-        bool remove = false;
-        std::filesystem::path p;
-        switch ( this->OS ) {
-            case 1:
-                // unix
-                p = this->home_path+"/.local/share/applications/LogDoctor.desktop";
-                if ( std::filesystem::exists( p ) ) {
-                    if ( std::filesystem::is_regular_file( p ) ) {
-                        // menu entry exists, plan remove it
-                        remove = true;
-                    } else {
-                        // not a file
-                        DialogBool dialog = DialogBool(
-                            MainWindow::tr( "Failed to remove the menu entry" ),
-                            QString("%1:\n%2").arg(
-                                MainWindow::tr( "The path doesn't point to a file" ),
-                                QString::fromStdString( p.string() ) ),
-                            MainWindow::tr( "Continue anyway?" ) );
-                        const bool response = dialog.exec();
-                        if ( ! response ) {
-                            ok = false;
-                        }
-                    }
-                }
-                break;
-            case 2:
-                p = this->home_path.substr(0,2) + "/ProgramData/Microsoft/Windows/Start Menu/Programs/LogDoctor.exe";
-                if ( std::filesystem::exists( p ) ) {
-                    if ( std::filesystem::is_symlink( p ) ) {
-                        // menu entry exists, plan remove it
-                        remove = true;
-                    } else {
-                        // not a symlink
-                        DialogBool dialog = DialogBool(
-                            MainWindow::tr( "Failed to remove the menu entry" ),
-                            QString("%1:\n%2").arg(
-                                MainWindow::tr( "The path doesn't point to a symlink" ),
-                                QString::fromStdString( p.string() ) ),
-                            MainWindow::tr( "Continue anyway?" ) );
-                        const bool response = dialog.exec();
-                        if ( ! response ) {
-                            ok = false;
-                        }
-                    }
-                }
-                break;
-            default:
-                throw( "Unexpected OS: "[this->OS] );
-        }
-        if ( remove ) {
-            this->ui->progressBar_Uninstall->setValue( 5 );
-            ok = std::filesystem::remove( p, err );
-            if ( ! ok ) {
-                // failed to remove
-                DialogBool dialog = DialogBool(
-                    MainWindow::tr( "Failed to remove the menu entry" ),
-                    QString("%1:\n%2").arg(
-                        MainWindow::tr( "An error occured while deleting the entry" ),
-                        QString::fromStdString( p.string() ) ),
-                    MainWindow::tr( "Continue anyway?" ),
-                    QString::fromStdString( err.message() ) );
-                const bool response = dialog.exec();
-                if ( ! response ) {
-                    ok = false;
-                }
-            }
-        }
-    }
-
+    this->ui->progressBar_Uninstall->setValue( 0 );
+    this->ui->label_Uninstall_Info->setText( MainWindow::tr( "Checking databases ..." ) );
+    // load the configs to get the databases paths
+    ok = this->checkDatabases();
 
     if ( ok && this->OS != 3 ) { // mac .app contains it
         this->ui->progressBar_Uninstall->setValue( 10 );
-        this->ui->label_Uninstall_Info->setText( MainWindow::tr( "Removing the icon ..." ) );
-        // remove the icon
-        bool remove = false;
-        std::filesystem::path p;
-        switch ( this->OS ) {
-            case 1:
-                // unix
-                p = "/usr/share/icons/logdoctor.svg";
-                if ( std::filesystem::exists( p ) ) { // !!! remove later
-                    // menu entry exists, plan remove it
-                    remove = true;
-                }
-                break;
-            case 2:
-                p = this->exec_path.string() + "/LogDoctor.svg";
-                if ( std::filesystem::exists( p ) ) { // !!! remove later
-                    // menu entry exists, plan remove it
-                    remove = true;
-                }
-                break;
-            default:
-                throw( "Unexpected OS: "[this->OS] );
-        }
-        /*if ( std::filesystem::exists( p ) ) {*/ // !!! restore after completing mac part
-        if ( remove ) {
-            ok = std::filesystem::remove( p, err );
-            if ( ! ok ) {
-                // failed to remove
-                DialogBool dialog = DialogBool(
-                    MainWindow::tr( "Failed to remove the icon" ),
-                    QString("%1:\n%2").arg(
-                        MainWindow::tr( "An error occured while deleting the entry" ),
-                        QString::fromStdString( p.string() ) ),
-                    MainWindow::tr( "Continue anyway?" ),
-                    QString::fromStdString( err.message() ) );
-                const bool response = dialog.exec();
-                if ( ! response ) {
-                    ok = false;
-                }
-            }
+        this->ui->label_Uninstall_Info->setText( MainWindow::tr( "Removing the menu entry ..." ) );
+        // remove the menu entry
+        this->removeMenuEntry();
+
+        if ( ok ) {
+            this->ui->progressBar_Uninstall->setValue( 20 );
+            this->ui->label_Uninstall_Info->setText( MainWindow::tr( "Removing the icon ..." ) );
+            // remove the icon
+            this->removeIcon();
         }
     }
 
 
     // remove data
     if ( ok ) {
-        this->ui->progressBar_Uninstall->setValue( 20 );
-        this->ui->label_Uninstall_Info->setText( MainWindow::tr( "Checking databases ..." ) );
-        // load the configs to get the databases paths
-        bool db_data_found = false;
-        bool db_hashes_found = false;
-        std::filesystem::path db_data_path;
-        std::filesystem::path db_hashes_path;
-        std::filesystem::path conf_file_path = this->conf_path.string() + "/logdoctor.conf";
-        try {
-            this->readConfigs( conf_file_path, db_data_path, db_hashes_path );
-            // check the existence
-            if ( db_data_path.string().size() > 0 ) {
-                if ( std::filesystem::exists( db_data_path )
-                  && std::filesystem::is_regular_file( db_data_path ) ) {
-                    // db found
-                    db_data_found = true;
-                }
-            }
-            if ( db_hashes_path.string().size() > 0 ) {
-                if ( std::filesystem::exists( db_hashes_path )
-                  && std::filesystem::is_regular_file( db_hashes_path ) ) {
-                    // db found
-                    db_hashes_found = true;
-                }
-            }
-        } catch (...) {
-            // something failed, doesn't matter what
-            ;
-        }
-
-        this->ui->progressBar_Uninstall->setValue( 25 );
-        if ( ! db_data_found ) {
-            // paths not found in the configs (or configs file not found), check the default path
-            db_data_path = this->data_path.string() + "/collection.db";
-            if ( std::filesystem::exists( db_data_path )
-              && std::filesystem::is_regular_file( db_data_path ) ) {
-                // db found
-                db_data_found = true;
-            } else {
-                // db not found
-                DialogBool dialog = DialogBool(
-                    MainWindow::tr( "Failed to remove database" ),
-                    QString("%1:\n%2").arg(
-                        MainWindow::tr( "Unable to locate the logs database" ),
-                        QString::fromStdString( db_data_path.string() ) ),
-                    MainWindow::tr( "Continue anyway?" ) );
-                const bool response = dialog.exec();
-                if ( ! response ) {
-                    ok = false;
-                }
-            }
-        }
-        this->ui->progressBar_Uninstall->setValue( 30 );
-        if ( ! db_hashes_found ) {
-            // configs file not found, check the default path
-            db_hashes_path = this->data_path.string() + "/hashes.db";
-            if ( std::filesystem::exists( db_hashes_path )
-              && std::filesystem::is_regular_file( db_hashes_path ) ) {
-                // db found
-                db_data_found = true;
-            } else {
-                // db not found
-                DialogBool dialog = DialogBool(
-                    MainWindow::tr( "Failed to remove database" ),
-                    QString("%1:\n%2").arg(
-                        MainWindow::tr( "Unable to locate the hashes database" ),
-                        QString::fromStdString( db_hashes_path.string() ) ),
-                    MainWindow::tr( "Continue anyway?" ) );
-                const bool response = dialog.exec();
-                if ( ! response ) {
-                    ok = false;
-                }
-            }
-        }
-
-        // databases paths has been established, in a way or another
-
         // remove the databases first, if required
         if ( ok && this->remove_databases ) {
             this->ui->progressBar_Uninstall->setValue( 35 );
             this->ui->label_Uninstall_Info->setText( MainWindow::tr( "Removing databases ..." ) );
-            if ( db_data_found ) {
-                this->ui->progressBar_Uninstall->setValue( 40 );
-                ok = std::filesystem::remove( db_data_path, err );
-                if ( ! ok ) {
-                    // failed to remove
-                    DialogBool dialog = DialogBool(
-                        MainWindow::tr( "Failed to remove database" ),
-                        QString("%1:\n%2").arg(
-                            MainWindow::tr( "An error occured while deleting the logs database" ),
-                            QString::fromStdString( db_data_path.string() ) ),
-                        MainWindow::tr( "Continue anyway?" ),
-                        QString::fromStdString( err.message() ) );
-                    const bool response = dialog.exec();
-                    if ( ! response ) {
-                        ok = false;
-                    }
-                }
-            }
-            if ( ok && db_hashes_found ) {
-                this->ui->progressBar_Uninstall->setValue( 45 );
-                ok = std::filesystem::remove( db_hashes_path, err );
-                if ( ! ok ) {
-                    // failed to remove
-                    DialogBool dialog = DialogBool(
-                        MainWindow::tr( "Failed to remove database" ),
-                        QString("%1:\n%2").arg(
-                            MainWindow::tr( "An error occured while deleting the hashes database" ),
-                            QString::fromStdString( this->exec_path.string() ) ),
-                        MainWindow::tr( "Continue anyway?" ),
-                        QString::fromStdString( err.message() ) );
-                    const bool response = dialog.exec();
-                    if ( ! response ) {
-                        ok = false;
-                    }
-                }
-            }
+            this->removeDatabases();
         }
     }
 
@@ -608,53 +400,7 @@ void MainWindow::Uninstall()
     if ( ok && this->remove_config_file ) {
         this->ui->progressBar_Uninstall->setValue( 50 );
         this->ui->label_Uninstall_Info->setText( MainWindow::tr( "Removing configuration data ..." ) );
-        if ( ! std::filesystem::exists( this->conf_path ) ) {
-            // conf dir not found
-            DialogBool dialog = DialogBool(
-                MainWindow::tr( "Failed to remove configuration data" ),
-                QString("%1:\n%2").arg(
-                    MainWindow::tr( "The directory doesn't exist" ),
-                    QString::fromStdString( this->conf_path.string() ) ),
-                MainWindow::tr( "Continue anyway?" ) );
-            const bool response = dialog.exec();
-            if ( ! response ) {
-                ok = false;
-            }
-        } else {
-            // path exists, check if dir
-            if ( ! std::filesystem::is_directory( this->conf_path ) ) {
-                // conf dir not found
-                DialogBool dialog = DialogBool(
-                    MainWindow::tr( "Failed to remove configuration data" ),
-                    QString("%1:\n%2").arg(
-                        MainWindow::tr( "The path doesn't point to a directory" ),
-                        QString::fromStdString( this->conf_path.string() ) ),
-                    MainWindow::tr( "Continue anyway?" ) );
-                const bool response = dialog.exec();
-                if ( ! response ) {
-                    ok = false;
-                }
-            } else {
-                this->ui->progressBar_Uninstall->setValue( 55 );
-                // it's a directory, remove it
-                std::ignore = std::filesystem::remove_all( this->conf_path, err );
-                ok = !std::filesystem::exists( this->conf_path );
-                if ( ! ok ) {
-                    // failed to remove
-                    DialogBool dialog = DialogBool(
-                        MainWindow::tr( "Failed to remove configuration data" ),
-                        QString("%1:\n%2").arg(
-                            MainWindow::tr( "An error occured while deleting the folder" ),
-                            QString::fromStdString( this->conf_path.string() ) ),
-                        MainWindow::tr( "Continue anyway?" ),
-                        QString::fromStdString( err.message() ) );
-                    const bool response = dialog.exec();
-                    if ( ! response ) {
-                        ok = false;
-                    }
-                }
-            }
-        }
+        this->removeConfigfile();
     }
 
 
@@ -662,113 +408,8 @@ void MainWindow::Uninstall()
     if ( ok ) {
         this->ui->progressBar_Uninstall->setValue( 65 );
         this->ui->label_Uninstall_Info->setText( MainWindow::tr( "Removing application data ..." ) );
-        bool remove = false;
         // check the app data folder
-        if ( ! std::filesystem::exists( this->data_path ) ) {
-            // path does not exists
-            DialogBool dialog = DialogBool(
-                MainWindow::tr( "Failed to remove application's data" ),
-                QString("%1:\n%2").arg(
-                    MainWindow::tr( "The directory doesn't exist" ),
-                    QString::fromStdString( this->data_path.string() ) ),
-                MainWindow::tr( "Continue anyway?" ) );
-            const bool response = dialog.exec();
-            if ( ! response ) {
-                ok = false;
-            }
-        } else {
-            // path exists
-            if ( ! std::filesystem::is_directory( this->data_path ) ) {
-                // not a file
-                DialogBool dialog = DialogBool(
-                    MainWindow::tr( "Failed to remove application's data" ),
-                    QString("%1:\n%2").arg(
-                        MainWindow::tr( "The path doesn't point to a directory" ),
-                        QString::fromStdString( this->data_path.string() ) ),
-                    MainWindow::tr( "Continue anyway?" ) );
-                const bool response = dialog.exec();
-                if ( ! response ) {
-                    ok = false;
-                }
-            } else {
-                // and it's a directory, keep going
-                remove = true;
-            }
-        }
-
-        if ( ok && remove ) {
-            this->ui->progressBar_Uninstall->setValue( 70 );
-            // remove data
-            bool delete_folder = false;
-            if ( this->remove_databases ) {
-                // no need to check for db presence, wipe it out
-                delete_folder = true;
-            } else {
-                // choosed to keep databases, check the presence here
-                bool db_found = false;
-                for ( const auto& name : std::vector<std::string>({"/collection.db","/hashes.db"}) ) {
-                    const std::filesystem::path path = this->data_path.string() + name;
-                    if ( std::filesystem::exists( path )
-                      && std::filesystem::is_regular_file( path ) ) {
-                        // db found
-                        db_found = true;
-                        break;
-                    }
-                }
-                delete_folder = !db_found;
-            }
-
-            this->ui->progressBar_Uninstall->setValue( 75 );
-            if ( delete_folder ) {
-                // delete the whole folder at once
-                std::ignore = std::filesystem::remove_all( this->data_path, err );
-                ok = !std::filesystem::exists( this->data_path );
-                if ( ! ok ) {
-                    // failed to remove
-                    DialogBool dialog = DialogBool(
-                        MainWindow::tr( "Failed to remove application's data" ),
-                        QString("%1:\n%2").arg(
-                            MainWindow::tr( "An error occured while deleting the folder" ),
-                            QString::fromStdString( this->data_path.string() ) ),
-                        MainWindow::tr( "Continue anyway?" ),
-                        QString::fromStdString( err.message() ) );
-                    const bool response = dialog.exec();
-                    if ( ! response ) {
-                        ok = false;
-                    }
-                }
-
-            } else {
-                // delete LogDoctor's data only, but not the databases
-                std::vector<std::filesystem::path> paths = {
-                    this->data_path.string() + "/help" };
-                if ( this->OS != 3 ) { // mac .app already contains it
-                    paths.push_back( this->data_path.string() + "/licenses" );
-                }
-                for ( const auto& path : paths ) {
-                    if ( std::filesystem::exists( path )
-                      && std::filesystem::is_directory( path ) ) {
-                        // found, remove
-                        ok = std::filesystem::remove_all( path, err );
-                        if ( ! ok ) {
-                            // failed to remove
-                            DialogBool dialog = DialogBool(
-                                MainWindow::tr( "Failed to remove application's data" ),
-                                QString("%1:\n%2").arg(
-                                    MainWindow::tr( "An error occured while deleting the entry" ),
-                                    QString::fromStdString( path.string() ) ),
-                                MainWindow::tr( "Continue anyway?" ),
-                                QString::fromStdString( err.message() ) );
-                            const bool response = dialog.exec();
-                            if ( ! response ) {
-                                ok = false;
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        ok = this->removeAppdata();
     }
 
 
@@ -777,145 +418,14 @@ void MainWindow::Uninstall()
         this->ui->progressBar_Uninstall->setValue( 90 );
         this->ui->label_Uninstall_Info->setText( MainWindow::tr( "Removing the executable ..." ) );
         // check the executable path
-        if ( ! std::filesystem::exists( this->exec_path ) ) {
-            // path does not exists
-            DialogBool dialog = DialogBool(
-                MainWindow::tr( "Failed to remove the executable" ),
-                QString("%1:\n%2").arg(
-                    MainWindow::tr( "The executable's directory doesn't exist" ),
-                    QString::fromStdString( this->exec_path.string() ) ),
-                MainWindow::tr( "Continue anyway?" ) );
-            const bool response = dialog.exec();
-            if ( ! response ) {
-                ok = false;
-            }
-
-        } else {
-            // directory exists, check the executable file
-            if ( this->OS == 1 ) {
-                // on linux/bsd, just remove the file
-                const std::filesystem::path path = this->exec_path.string() + "/logdoctor";
-                if ( ! std::filesystem::exists( path ) ) {
-                    // executable does not exists
-                    DialogBool dialog = DialogBool(
-                        MainWindow::tr( "Failed to remove the executable" ),
-                        QString("%1:\n%2").arg(
-                            MainWindow::tr( "File not found" ),
-                            QString::fromStdString( path.string() ) ),
-                        MainWindow::tr( "Continue anyway?" ) );
-                    const bool response = dialog.exec();
-                    if ( ! response ) {
-                        ok = false;
-                    }
-
-                } else {
-                    // executable found, check it
-                    if ( ! std::filesystem::is_regular_file( path ) ) {
-                        // not a file
-                        DialogBool dialog = DialogBool(
-                            MainWindow::tr( "Failed to remove the executable" ),
-                            QString("%1:\n%2").arg(
-                                MainWindow::tr( "The path doesn't point to a file" ),
-                                QString::fromStdString( this->exec_path.string() ) ),
-                            MainWindow::tr( "Continue anyway?" ) );
-                        const bool response = dialog.exec();
-                        if ( ! response ) {
-                            ok = false;
-                        }
-
-                    } else {
-                        // everything seems fine, remove the file
-                        ok = std::filesystem::remove( path, err );
-                        if ( ! ok ) {
-                            // failed to remove
-                            DialogBool dialog = DialogBool(
-                                MainWindow::tr( "Failed to remove the executable" ),
-                                QString("%1:\n%2").arg(
-                                    MainWindow::tr( "An error occured while deleting the file" ),
-                                    QString::fromStdString( this->exec_path.string() ) ),
-                                MainWindow::tr( "Continue anyway?" ),
-                                QString::fromStdString( err.message() ) );
-                            const bool response = dialog.exec();
-                            if ( ! response ) {
-                                ok = false;
-                            }
-                        }
-                    }
-                }
-
-            } else {
-                // on windows/mac, remove the whole folder
-                std::filesystem::path path;
-                switch ( this->OS ) {
-                    case 2:
-                        path = this->exec_path.string() + "/LogDoctor.app";
-                        break;
-                    case 3:
-                        path = this->exec_path.string() + "/LogDoctor";
-                        break;
-                    default:
-                        throw( "Unexpected OS: "[this->OS] );
-                }
-                if ( ! std::filesystem::is_directory( path ) ) {
-                    // not a file
-                    DialogBool dialog = DialogBool(
-                        MainWindow::tr( "Failed to remove the executable" ),
-                        QString("%1:\n%2").arg(
-                            MainWindow::tr( "The path doesn't point to a directory" ),
-                            QString::fromStdString( path.string() ) ),
-                        MainWindow::tr( "Continue anyway?" ) );
-                    const bool response = dialog.exec();
-                    if ( ! response ) {
-                        ok = false;
-                    }
-
-                } else {
-                    // everything seems fine, remove the file
-                    std::ignore = std::filesystem::remove_all( path, err );
-                    ok = !std::filesystem::exists( path );
-                    if ( ! ok ) {
-                        // failed to remove
-                        DialogBool dialog = DialogBool(
-                            MainWindow::tr( "Failed to remove the executable" ),
-                            QString("%1:\n%2").arg(
-                                MainWindow::tr( "An error occured while deleting the folder" ),
-                                QString::fromStdString( path.string() ) ),
-                            MainWindow::tr( "Continue anyway?" ),
-                            QString::fromStdString( err.message() ) );
-                        const bool response = dialog.exec();
-                        if ( ! response ) {
-                            ok = false;
-                        }
-                    }
-                }
-            }
-        }
+        ok = this->removeExecutable();
     }
 
+    // remove the uninstaller
     if ( ok && this->OS == 1 ) {
         this->ui->progressBar_Uninstall->setValue( 95 );
         // on linux/bsd check if the uninstaller has been removed already
-        const std::filesystem::path path = this->data_path.string() + "/uninstall";
-        if ( std::filesystem::exists( path ) ) {
-            if ( std::filesystem::is_regular_file( path ) ) {
-                // found, remove
-                ok = std::filesystem::remove( path, err );
-                if ( ! ok ) {
-                    // failed to remove
-                    DialogBool dialog = DialogBool(
-                        MainWindow::tr( "Failed to remove the uninstaller" ),
-                        QString("%1:\n%2").arg(
-                            MainWindow::tr( "An error occured while deleting the entry" ),
-                            QString::fromStdString( path.string() ) ),
-                        MainWindow::tr( "Continue anyway?" ),
-                        QString::fromStdString( err.message() ) );
-                    const bool response = dialog.exec();
-                    if ( ! response ) {
-                        ok = false;
-                    }
-                }
-            }
-        }
+        ok = this->removeSelf();
     }
 
 
@@ -932,6 +442,587 @@ void MainWindow::Uninstall()
     }
     this->uninstalling = false;
 }
+
+
+
+
+///////////////////
+//// FUNCTIONS ////
+///////////////////
+bool MainWindow::checkDatabases()
+{
+    bool ok = true;
+
+    std::filesystem::path conf_file_path = this->conf_path.string() + "/logdoctor.conf";
+    try {
+        this->readConfigs( conf_file_path );
+        // check the existence
+        if ( this->db_data_path.string().size() > 0 ) {
+            this->db_data_path = this->db_data_path.string() + "/collection.db";
+            if ( std::filesystem::exists( this->db_data_path )
+              && std::filesystem::is_regular_file( this->db_data_path ) ) {
+                // db found
+                this->db_data_found = true;
+            }
+        }
+        if ( this->db_hashes_path.string().size() > 0 ) {
+            this->db_hashes_path = this->db_hashes_path.string() + "/hashes.db";
+            if ( std::filesystem::exists( this->db_hashes_path )
+              && std::filesystem::is_regular_file( this->db_hashes_path ) ) {
+                // db found
+                this->db_hashes_found = true;
+            }
+        }
+    } catch (...) {
+        // something failed, doesn't matter what
+        ;
+    }
+
+    this->ui->progressBar_Uninstall->setValue( 3 );
+    if ( ! this->db_data_found ) {
+        // paths not found in the configs (or configs file not found), check the default path
+        this->db_data_path = this->data_path.string() + "/collection.db";
+        if ( std::filesystem::exists( this->db_data_path )
+          && std::filesystem::is_regular_file( this->db_data_path ) ) {
+            // db found
+            this->db_data_found = true;
+        } else {
+            // db not found
+            DialogBool dialog = DialogBool(
+                MainWindow::tr( "Database not found" ),
+                QString("%1:\n%2").arg(
+                    MainWindow::tr( "Unable to locate the logs database" ),
+                    QString::fromStdString( this->db_data_path.string() ) ),
+                MainWindow::tr( "Continue anyway?" ) );
+            ok = dialog.exec();
+        }
+    }
+    this->ui->progressBar_Uninstall->setValue( 6 );
+    if ( ! this->db_hashes_found ) {
+        // configs file not found, check the default path
+        this->db_hashes_path = this->data_path.string() + "/hashes.db";
+        if ( std::filesystem::exists( this->db_hashes_path )
+          && std::filesystem::is_regular_file( this->db_hashes_path ) ) {
+            // db found
+            this->db_data_found = true;
+        } else {
+            // db not found
+            DialogBool dialog = DialogBool(
+                MainWindow::tr( "Database not found" ),
+                QString("%1:\n%2").arg(
+                    MainWindow::tr( "Unable to locate the hashes database" ),
+                    QString::fromStdString( this->db_hashes_path.string() ) ),
+                MainWindow::tr( "Continue anyway?" ) );
+            ok = dialog.exec();
+        }
+    }
+    return ok;
+}
+
+
+bool MainWindow::removeMenuEntry()
+{
+    bool ok = true;
+    std::error_code err;
+
+    bool remove = false;
+    std::filesystem::path p;
+    switch ( this->OS ) {
+
+        case 1:
+            // unix
+            p = this->home_path+"/.local/share/applications/LogDoctor.desktop";
+            if ( std::filesystem::exists( p ) ) {
+                if ( std::filesystem::is_regular_file( p ) ) {
+                    // menu entry exists, plan remove it
+                    remove = true;
+                } else {
+                    // not a file
+                    DialogBool dialog = DialogBool(
+                        MainWindow::tr( "Failed to remove the menu entry" ),
+                        QString("%1:\n%2").arg(
+                            MainWindow::tr( "The path doesn't point to a file" ),
+                            QString::fromStdString( p.string() ) ),
+                        MainWindow::tr( "Continue anyway?" ) );
+                    ok = dialog.exec();
+                }
+            }
+            break;
+
+        case 2:
+            p = this->home_path.substr(0,2) + "/ProgramData/Microsoft/Windows/Start Menu/Programs/LogDoctor.exe";
+            if ( std::filesystem::exists( p ) ) {
+                if ( std::filesystem::is_symlink( p ) ) {
+                    // menu entry exists, plan remove it
+                    remove = true;
+                } else {
+                    // not a symlink
+                    DialogBool dialog = DialogBool(
+                        MainWindow::tr( "Failed to remove the menu entry" ),
+                        QString("%1:\n%2").arg(
+                            MainWindow::tr( "The path doesn't point to a symlink" ),
+                            QString::fromStdString( p.string() ) ),
+                        MainWindow::tr( "Continue anyway?" ) );
+                    ok = dialog.exec();
+                }
+            }
+            break;
+
+        default:
+            throw( "LogDoctor: removeMenuEntry(): Unexpected OS: "[this->OS] );
+    }
+    if ( remove ) {
+        this->ui->progressBar_Uninstall->setValue( 15 );
+        ok = std::filesystem::remove( p, err );
+        if ( ! ok ) {
+            // failed to remove
+            DialogBool dialog = DialogBool(
+                MainWindow::tr( "Failed to remove the menu entry" ),
+                QString("%1:\n%2").arg(
+                    MainWindow::tr( "An error occured while removing the entry" ),
+                    QString::fromStdString( p.string() ) ),
+                MainWindow::tr( "Continue anyway?" ),
+                QString::fromStdString( err.message() ) );
+            ok = dialog.exec();
+        }
+    }
+    return ok;
+}
+
+
+bool MainWindow::removeIcon()
+{
+    bool ok = true;
+    std::error_code err;
+
+    bool remove = false;
+    std::filesystem::path p;
+    switch ( this->OS ) {
+        case 1:
+            // unix
+            p = "/usr/share/icons/logdoctor.svg";
+            if ( std::filesystem::exists( p ) ) { // !!! remove later
+                // menu entry exists, plan remove it
+                remove = true;
+            }
+            break;
+        case 2:
+            p = this->exec_path.string() + "/LogDoctor.svg";
+            if ( std::filesystem::exists( p ) ) { // !!! remove later
+                // menu entry exists, plan remove it
+                remove = true;
+            }
+            break;
+        default:
+            throw( "LogDoctor: removeIcon(): Unexpected OS: "[this->OS] );
+    }
+    /*if ( std::filesystem::exists( p ) ) {*/ // !!! restore after completing mac part
+    if ( remove ) {
+        ok = std::filesystem::remove( p, err );
+        if ( ! ok ) {
+            // failed to remove
+            DialogBool dialog = DialogBool(
+                MainWindow::tr( "Failed to remove the icon" ),
+                QString("%1:\n%2").arg(
+                    MainWindow::tr( "An error occured while deleting the file" ),
+                    QString::fromStdString( p.string() ) ),
+                MainWindow::tr( "Continue anyway?" ),
+                QString::fromStdString( err.message() ) );
+            ok = dialog.exec();
+        }
+    }
+    return ok;
+}
+
+
+bool MainWindow::removeDatabases()
+{
+    bool ok = true;
+    std::error_code err;
+
+    if ( this->db_data_found ) {
+        this->ui->progressBar_Uninstall->setValue( 40 );
+        ok = std::filesystem::remove( this->db_data_path, err );
+        if ( ! ok ) {
+            // failed to remove
+            DialogBool dialog = DialogBool(
+                MainWindow::tr( "Failed to remove database" ),
+                QString("%1:\n%2").arg(
+                    MainWindow::tr( "An error occured while deleting the logs database" ),
+                    QString::fromStdString( this->db_data_path.string() ) ),
+                MainWindow::tr( "Continue anyway?" ),
+                QString::fromStdString( err.message() ) );
+            ok = dialog.exec();
+        }
+    }
+    if ( ok && this->db_hashes_found ) {
+        this->ui->progressBar_Uninstall->setValue( 45 );
+        ok = std::filesystem::remove( this->db_hashes_path, err );
+        if ( ! ok ) {
+            // failed to remove
+            DialogBool dialog = DialogBool(
+                MainWindow::tr( "Failed to remove database" ),
+                QString("%1:\n%2").arg(
+                    MainWindow::tr( "An error occured while deleting the hashes database" ),
+                    QString::fromStdString( this->db_hashes_path.string() ) ),
+                MainWindow::tr( "Continue anyway?" ),
+                QString::fromStdString( err.message() ) );
+            ok = dialog.exec();
+        }
+    }
+    return ok;
+}
+
+
+bool MainWindow::removeConfigfile()
+{
+    bool ok = true;
+    std::error_code err;
+
+    if ( ! std::filesystem::exists( this->conf_path ) ) {
+        // conf dir not found
+        DialogBool dialog = DialogBool(
+            MainWindow::tr( "Failed to remove configuration data" ),
+            QString("%1:\n%2").arg(
+                MainWindow::tr( "The directory doesn't exist" ),
+                QString::fromStdString( this->conf_path.string() ) ),
+            MainWindow::tr( "Continue anyway?" ) );
+        ok = dialog.exec();
+    } else {
+        // path exists, check if dir
+        if ( ! std::filesystem::is_directory( this->conf_path ) ) {
+            // conf dir not found
+            DialogBool dialog = DialogBool(
+                MainWindow::tr( "Failed to remove configuration data" ),
+                QString("%1:\n%2").arg(
+                    MainWindow::tr( "The path doesn't point to a directory" ),
+                    QString::fromStdString( this->conf_path.string() ) ),
+                MainWindow::tr( "Continue anyway?" ) );
+            ok = dialog.exec();
+        } else {
+            this->ui->progressBar_Uninstall->setValue( 55 );
+            // it's a directory, remove it
+            bool delete_folder = false;
+            if ( this->remove_databases && this->db_data_found && this->db_hashes_found ) {
+                // no need to check for db presence, wipe it out
+                delete_folder = true;
+            } else {
+                // choosed to keep databases, check the presence here
+                bool db_found = false;
+                {
+                    const std::filesystem::path path = this->conf_path.string()+"/collection.db";
+                    if ( this->db_data_found ) {
+                        if ( this->db_data_path == path ) {
+                            db_found = true;
+                        }
+                    } else {
+                        if ( std::filesystem::exists( path )
+                          && std::filesystem::is_regular_file( path ) ) {
+                            // db found
+                            db_found = true;
+                        }
+                    }
+                }{
+                    const std::filesystem::path path = this->conf_path.string()+"/hashes.db";
+                    if ( this->db_data_found ) {
+                        if ( this->db_data_path == path ) {
+                            db_found = true;
+                        }
+                    } else {
+                        if ( std::filesystem::exists( path )
+                          && std::filesystem::is_regular_file( path ) ) {
+                            // db found
+                            db_found = true;
+                        }
+                    }
+                }
+                delete_folder = !db_found;
+            }
+            std::filesystem::path path;
+            if ( delete_folder ) {
+                path = this->conf_path.string();
+                std::ignore = std::filesystem::remove_all( path, err );
+                ok = !std::filesystem::exists( path );
+            } else {
+                path = this->conf_path.string()+"/logdoctor.conf";
+                ok = std::filesystem::remove( path, err );
+            }
+            if ( ! ok ) {
+                // failed to remove
+                DialogBool dialog = DialogBool(
+                    MainWindow::tr( "Failed to remove configuration data" ),
+                    QString("%1:\n%2").arg(
+                        (delete_folder)
+                            ? MainWindow::tr( "An error occured while deleting the folder" )
+                            : MainWindow::tr( "An error occured while deleting the file" ),
+                        QString::fromStdString( path.string() ) ),
+                    MainWindow::tr( "Continue anyway?" ),
+                    QString::fromStdString( err.message() ) );
+                ok = dialog.exec();
+            }
+        }
+    }
+    return ok;
+}
+
+
+bool MainWindow::removeAppdata()
+{
+    bool ok = true;
+    std::error_code err;
+
+    bool remove = false;
+    if ( ! std::filesystem::exists( this->data_path ) ) {
+        // path does not exists
+        DialogBool dialog = DialogBool(
+            MainWindow::tr( "Failed to remove application's data" ),
+            QString("%1:\n%2").arg(
+                MainWindow::tr( "The directory doesn't exist" ),
+                QString::fromStdString( this->data_path.string() ) ),
+            MainWindow::tr( "Continue anyway?" ) );
+        ok = dialog.exec();
+    } else {
+        // path exists
+        if ( ! std::filesystem::is_directory( this->data_path ) ) {
+            // not a directory
+            DialogBool dialog = DialogBool(
+                MainWindow::tr( "Failed to remove application's data" ),
+                QString("%1:\n%2").arg(
+                    MainWindow::tr( "The path doesn't point to a directory" ),
+                    QString::fromStdString( this->data_path.string() ) ),
+                MainWindow::tr( "Continue anyway?" ) );
+            ok = dialog.exec();
+        } else {
+            // and it's a directory, keep going
+            remove = true;
+        }
+    }
+
+    if ( ok && remove ) {
+        this->ui->progressBar_Uninstall->setValue( 70 );
+        // remove data
+        bool delete_folder = false;
+        if ( this->remove_databases && this->db_data_found && this->db_hashes_found ) {
+            // no need to check for db presence, wipe it out
+            delete_folder = true;
+        } else {
+            // choosed to keep databases, check the presence here
+            bool db_found = false;
+            {
+                const std::filesystem::path path = this->data_path.string()+"/collection.db";
+                if ( this->db_data_found ) {
+                    if ( this->db_data_path == path ) {
+                        db_found = true;
+                    }
+                } else {
+                    if ( std::filesystem::exists( path )
+                      && std::filesystem::is_regular_file( path ) ) {
+                        // db found
+                        db_found = true;
+                    }
+                }
+            }
+            if ( !db_found ) {
+                const std::filesystem::path path = this->data_path.string()+"/hashes.db";
+                if ( this->db_data_found ) {
+                    if ( this->db_data_path == path ) {
+                        db_found = true;
+                    }
+                } else {
+                    if ( std::filesystem::exists( path )
+                      && std::filesystem::is_regular_file( path ) ) {
+                        // db found
+                        db_found = true;
+                    }
+                }
+            }
+            delete_folder = !db_found;
+        }
+
+        this->ui->progressBar_Uninstall->setValue( 75 );
+        if ( delete_folder ) {
+            // delete the whole folder at once
+            std::ignore = std::filesystem::remove_all( this->data_path, err );
+            ok = !std::filesystem::exists( this->data_path );
+            if ( ! ok ) {
+                // failed to remove
+                DialogBool dialog = DialogBool(
+                    MainWindow::tr( "Failed to remove application's data" ),
+                    QString("%1:\n%2").arg(
+                        MainWindow::tr( "An error occured while deleting the folder" ),
+                        QString::fromStdString( this->data_path.string() ) ),
+                    MainWindow::tr( "Continue anyway?" ),
+                    QString::fromStdString( err.message() ) );
+                ok = dialog.exec();
+            }
+
+        } else {
+            // delete LogDoctor's data only, but not the databases
+            std::vector<std::filesystem::path> paths = {
+                this->data_path.string() + "/help" };
+            if ( this->OS != 3 ) { // mac .app already contains it
+                paths.push_back( this->data_path.string() + "/licenses" );
+            }
+            for ( const auto& path : paths ) {
+                if ( std::filesystem::exists( path )
+                  && std::filesystem::is_directory( path ) ) {
+                    // found, remove
+                    ok = std::filesystem::remove_all( path, err );
+                    if ( ! ok ) {
+                        // failed to remove
+                        DialogBool dialog = DialogBool(
+                            MainWindow::tr( "Failed to remove application's data" ),
+                            QString("%1:\n%2").arg(
+                                MainWindow::tr( "An error occured while deleting the folder" ),
+                                QString::fromStdString( path.string() ) ),
+                            MainWindow::tr( "Continue anyway?" ),
+                            QString::fromStdString( err.message() ) );
+                        ok = dialog.exec();
+                        if ( !ok ) {
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return ok;
+}
+
+
+bool MainWindow::removeExecutable()
+{
+    bool ok = true;
+    std::error_code err;
+
+    if ( ! std::filesystem::exists( this->exec_path ) ) {
+        // path does not exists
+        DialogBool dialog = DialogBool(
+            MainWindow::tr( "Failed to remove the executable" ),
+            QString("%1:\n%2").arg(
+                MainWindow::tr( "The executable's directory doesn't exist" ),
+                QString::fromStdString( this->exec_path.string() ) ),
+            MainWindow::tr( "Continue anyway?" ) );
+        ok = dialog.exec();
+
+    } else {
+        // directory exists, check the executable file
+        if ( this->OS == 1 ) {
+            // on linux/bsd, just remove the file
+            const std::filesystem::path path = this->exec_path.string() + "/logdoctor";
+            if ( ! std::filesystem::exists( path ) ) {
+                // executable does not exists
+                DialogBool dialog = DialogBool(
+                    MainWindow::tr( "Failed to remove the executable" ),
+                    QString("%1:\n%2").arg(
+                        MainWindow::tr( "File not found" ),
+                        QString::fromStdString( path.string() ) ),
+                    MainWindow::tr( "Continue anyway?" ) );
+                ok = dialog.exec();
+
+            } else {
+                // executable found, check it
+                if ( ! std::filesystem::is_regular_file( path ) ) {
+                    // not a file
+                    DialogBool dialog = DialogBool(
+                        MainWindow::tr( "Failed to remove the executable" ),
+                        QString("%1:\n%2").arg(
+                            MainWindow::tr( "The path doesn't point to a file" ),
+                            QString::fromStdString( this->exec_path.string() ) ),
+                        MainWindow::tr( "Continue anyway?" ) );
+                    ok = dialog.exec();
+
+                } else {
+                    // everything seems fine, remove the file
+                    ok = std::filesystem::remove( path, err );
+                    if ( ! ok ) {
+                        // failed to remove
+                        DialogBool dialog = DialogBool(
+                            MainWindow::tr( "Failed to remove the executable" ),
+                            QString("%1:\n%2").arg(
+                                MainWindow::tr( "An error occured while deleting the file" ),
+                                QString::fromStdString( this->exec_path.string() ) ),
+                            MainWindow::tr( "Continue anyway?" ),
+                            QString::fromStdString( err.message() ) );
+                        ok = dialog.exec();
+                    }
+                }
+            }
+
+        } else {
+            // on windows/mac, remove the folder
+            std::filesystem::path path;
+            switch ( this->OS ) {
+                case 2:
+                    path = this->exec_path.string() + "/LogDoctor.app";
+                    break;
+                case 3:
+                    path = this->exec_path.string() + "/LogDoctor";
+                    break;
+                default:
+                    throw( "LogDoctor: removeExecutable(): Unexpected OS: "[this->OS] );
+            }
+            if ( ! std::filesystem::is_directory( path ) ) {
+                // not a directory
+                DialogBool dialog = DialogBool(
+                    MainWindow::tr( "Failed to remove the executable" ),
+                    QString("%1:\n%2").arg(
+                        MainWindow::tr( "The path doesn't point to a directory" ),
+                        QString::fromStdString( path.string() ) ),
+                    MainWindow::tr( "Continue anyway?" ) );
+                ok = dialog.exec();
+
+            } else {
+                // everything seems fine, remove the file
+                std::ignore = std::filesystem::remove_all( path, err );
+                ok = !std::filesystem::exists( path );
+                if ( ! ok ) {
+                    // failed to remove
+                    DialogBool dialog = DialogBool(
+                        MainWindow::tr( "Failed to remove the executable" ),
+                        QString("%1:\n%2").arg(
+                            MainWindow::tr( "An error occured while deleting the folder" ),
+                            QString::fromStdString( path.string() ) ),
+                        MainWindow::tr( "Continue anyway?" ),
+                        QString::fromStdString( err.message() ) );
+                    ok = dialog.exec();
+                }
+            }
+        }
+    }
+    return ok;
+}
+
+
+bool MainWindow::removeSelf()
+{
+    bool ok = true;
+    std::error_code err;
+
+    if ( std::filesystem::exists( this->data_path ) ) { // may have been deleted already
+        const std::filesystem::path path = this->data_path.string() + "/uninstall";
+        if ( std::filesystem::exists( path ) ) {
+            if ( std::filesystem::is_regular_file( path ) ) {
+                // found, remove
+                ok = std::filesystem::remove( path, err );
+                if ( ! ok ) {
+                    // failed to remove
+                    DialogBool dialog = DialogBool(
+                        MainWindow::tr( "Failed to remove the uninstaller" ),
+                        QString("%1:\n%2").arg(
+                            MainWindow::tr( "An error occured while deleting the file" ),
+                            QString::fromStdString( path.string() ) ),
+                        MainWindow::tr( "Continue anyway?" ),
+                        QString::fromStdString( err.message() ) );
+                    ok = dialog.exec();
+                }
+            }
+        }
+    }
+    return ok;
+}
+
+
 
 
 

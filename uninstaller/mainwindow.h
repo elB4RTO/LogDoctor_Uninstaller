@@ -58,24 +58,24 @@ private:
     const std::string cleanPath( const QString& path );
     // 1: linux, 2:windows, 3:mac
     const std::string home_path = this->cleanPath( QStandardPaths::locate( QStandardPaths::HomeLocation, "", QStandardPaths::LocateDirectory ) );
-    #if defined( Q_OS_UNIX )
-        // Unix-like systems: Linux, BSD and SysV
-        const unsigned int OS = 1;
-        const std::filesystem::path exec_path = "/usr/bin";
-        const std::filesystem::path conf_path = home_path + "/.config/LogDoctor";
-        const std::filesystem::path data_path = home_path + "/.local/share/LogDoctor";
-    #elif defined( Q_OS_WIN )
-        // Microsoft Windows systems
-        const unsigned int OS = 2;
-        const std::filesystem::path exec_path = home_path.substr(0,2) + "/ProgramFiles/LogDoctor";
-        const std::filesystem::path conf_path = home_path + "/AppData/Local/LogDoctor";
-        const std::filesystem::path data_path = home_path + "/AppData/Local/LogDoctor";
-    #elif defined( Q_OS_DARWIN )
+    #if defined( Q_OS_DARWIN )
         // Darwin-based systems: macOS, macOS, iOS, watchOS and tvOS.
         const unsigned int OS = 3;
         const std::filesystem::path exec_path = "/Applications";
         const std::filesystem::path conf_path = home_path + "/Lybrary/Preferences/LogDoctor";
         const std::filesystem::path data_path = home_path + "/Lybrary/Application Support/LogDoctor";
+    #elif defined( Q_OS_WIN )
+        // Microsoft Windows systems
+        const unsigned int OS = 2;
+        const std::filesystem::path exec_path = home_path.substr(0,2) + "/Program Files";
+        const std::filesystem::path conf_path = home_path + "/AppData/Local/LogDoctor";
+        const std::filesystem::path data_path = home_path + "/AppData/Local/LogDoctor";
+    #elif defined( Q_OS_UNIX )
+        // Unix-like systems: Linux, BSD and SysV
+        const unsigned int OS = 1;
+        const std::filesystem::path exec_path = "/usr/bin";
+        const std::filesystem::path conf_path = home_path + "/.config/LogDoctor";
+        const std::filesystem::path data_path = home_path + "/.local/share/LogDoctor";
     #else
         #error "System not supported"
     #endif
@@ -88,14 +88,31 @@ private:
     // work related
     bool remove_config_file = false;
     bool remove_databases   = false;
+    // db related
+    bool db_data_found   = false;
+    bool db_hashes_found = false;
+    std::filesystem::path db_data_path;
+    std::filesystem::path db_hashes_path;
+    // resources
+    const std::vector<std::string> resources = {
+        "licenses",
+        "help" };
     // uninstall
     QTimer* waiter_timer = new QTimer();
     QTimer* uninstaller_timer = new QTimer();
     bool uninstalling;
     void startUninstalling();
+    bool checkDatabases();
+    bool removeMenuEntry();
+    bool removeIcon();
+    bool removeDatabases();
+    bool removeConfigfile();
+    bool removeAppdata();
+    bool removeExecutable();
+    bool removeSelf();
 
     // for the configs
-    void readConfigs( std::filesystem::path& file_path, std::filesystem::path& db_data_path, std::filesystem::path& db_hashes_path );
+    void readConfigs( std::filesystem::path& file_path );
     void readFile( std::filesystem::path& path, std::string& output );
     void splitrip( std::vector<std::string>& output, const std::string& input, const std::string& separator="\n" );
     void split( std::vector<std::string>& output, const std::string& input, const std::string& separator );
