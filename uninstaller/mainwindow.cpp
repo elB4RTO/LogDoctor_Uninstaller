@@ -504,7 +504,7 @@ bool MainWindow::checkDatabases()
         if ( std::filesystem::exists( this->db_hashes_path )
           && std::filesystem::is_regular_file( this->db_hashes_path ) ) {
             // db found
-            this->db_data_found = true;
+            this->db_hashes_found = true;
         } else {
             // db not found
             DialogBool dialog = DialogBool(
@@ -643,8 +643,8 @@ bool MainWindow::removeDatabases()
     if ( this->db_data_found ) {
         this->ui->progressBar_Uninstall->setValue( 40 );
         ok = std::filesystem::remove( this->db_data_path, err );
-        if ( ! ok ) {
-            // failed to remove
+        if ( !ok ) {
+            // failed to remove the database
             DialogBool dialog = DialogBool(
                 MainWindow::tr( "Failed to remove database" ),
                 QString("%1:\n%2").arg(
@@ -653,6 +653,28 @@ bool MainWindow::removeDatabases()
                 MainWindow::tr( "Continue anyway?" ),
                 QString::fromStdString( err.message() ) );
             ok = dialog.exec();
+        } else {
+            // try removing the backups too
+            std::string aux = this->db_data_path.string();
+            aux = aux.substr( 0, aux.size()-14 );
+            std::filesystem::path path = aux+"/backups";
+            if ( std::filesystem::exists( path )
+              && std::filesystem::is_directory( path ) ) {
+                // backups folder found
+                std::ignore = std::filesystem::remove_all( path, err );
+                ok = !std::filesystem::exists( path );
+                if ( !ok ) {
+                    // failed to remove backups
+                    DialogBool dialog = DialogBool(
+                        MainWindow::tr( "Failed to remove database backups" ),
+                        QString("%1:\n%2").arg(
+                            MainWindow::tr( "An error occured while deleting the logs database's backups" ),
+                            QString::fromStdString( path.string() ) ),
+                        MainWindow::tr( "Continue anyway?" ),
+                        QString::fromStdString( err.message() ) );
+                    ok = dialog.exec();
+                }
+            }
         }
     }
     if ( ok && this->db_hashes_found ) {
@@ -703,7 +725,7 @@ bool MainWindow::removeConfigfile()
             this->ui->progressBar_Uninstall->setValue( 55 );
             // it's a directory, remove it
             bool delete_folder = false;
-            if ( this->remove_databases && this->db_data_found && this->db_hashes_found ) {
+            if ( this->remove_databases ) {
                 // no need to check for db presence, wipe it out
                 delete_folder = true;
             } else {
@@ -802,41 +824,59 @@ bool MainWindow::removeAppdata()
         this->ui->progressBar_Uninstall->setValue( 70 );
         // remove data
         bool delete_folder = false;
-        if ( this->remove_databases && this->db_data_found && this->db_hashes_found ) {
-            // no need to check for db presence, wipe it out
-            delete_folder = true;
+        bool db_data_here = false;
+        bool db_hashes_here = false;
+        bool conf_file_here = false;
+        if ( this->remove_databases ) {
+            if ( this->OS != 2 || (this->OS == 2 && this->remove_config_file) ) {
+                // no need to check for db/conf presence, wipe it out
+                delete_folder = true;
+            }
         } else {
             // choosed to keep databases, check the presence here
-            bool db_found = false;
+            bool found = false;
             {
                 const std::filesystem::path path = this->data_path.string()+"/collection.db";
                 if ( this->db_data_found ) {
                     if ( this->db_data_path == path ) {
-                        db_found = true;
+                        found = true;
+                        db_data_here = true;
                     }
                 } else {
                     if ( std::filesystem::exists( path )
                       && std::filesystem::is_regular_file( path ) ) {
                         // db found
-                        db_found = true;
+                        found = true;
+                        db_data_here = true;
                     }
                 }
             }
-            if ( !db_found ) {
+            {
                 const std::filesystem::path path = this->data_path.string()+"/hashes.db";
                 if ( this->db_data_found ) {
                     if ( this->db_data_path == path ) {
-                        db_found = true;
+                        found = true;
+                        db_hashes_here = true;
                     }
                 } else {
                     if ( std::filesystem::exists( path )
                       && std::filesystem::is_regular_file( path ) ) {
                         // db found
-                        db_found = true;
+                        found = true;
+                        db_hashes_here = true;
                     }
                 }
             }
-            delete_folder = !db_found;
+            if ( this->OS == 2 ) {
+                const std::filesystem::path path = this->data_path.string()+"/logdoctor.conf";
+                if ( std::filesystem::exists( path )
+                  && std::filesystem::is_regular_file( path ) ) {
+                    // config file found
+                    found = true;
+                    conf_file_here = true;
+                }
+            }
+            delete_folder = !found;
         }
 
         this->ui->progressBar_Uninstall->setValue( 75 );
@@ -862,6 +902,16 @@ bool MainWindow::removeAppdata()
                 this->data_path.string() + "/help" };
             if ( this->OS != 3 ) { // mac .app already contains it
                 paths.push_back( this->data_path.string() + "/licenses" );
+            }
+            if ( this->remove_databases && db_data_here ) {
+                paths.push_back( this->data_path.string() + "/collection.db" );
+                paths.push_back( this->data_path.string() + "/backups" );
+            }
+            if ( this->remove_databases && db_hashes_here ) {
+                paths.push_back( this->data_path.string() + "/hashes.db" );
+            }
+            if ( this->remove_config_file && conf_file_here ) {
+                paths.push_back( this->data_path.string() + "/logdoctor.conf" );
             }
             for ( const auto& path : paths ) {
                 if ( std::filesystem::exists( path )
@@ -954,10 +1004,10 @@ bool MainWindow::removeExecutable()
             std::filesystem::path path;
             switch ( this->OS ) {
                 case 2:
-                    path = this->exec_path.string() + "/LogDoctor.app";
+                    path = this->exec_path.string() + "/LogDoctor";
                     break;
                 case 3:
-                    path = this->exec_path.string() + "/LogDoctor";
+                    path = this->exec_path.string() + "/LogDoctor.app";
                     break;
                 default:
                     throw( "LogDoctor: removeExecutable(): Unexpected OS: "[this->OS] );
