@@ -600,7 +600,7 @@ bool MainWindow::removeIcon()
     switch ( this->OS ) {
         case 1:
             // unix
-            p = "/usr/share/icons/logdoctor.svg";
+            p = "/usr/share/LogDoctor/LogDoctor.svg";
             if ( std::filesystem::exists( p ) ) { // !!! remove later
                 // menu entry exists, plan remove it
                 remove = true;
