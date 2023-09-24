@@ -13,7 +13,7 @@ MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
 {
-    ui->setupUi(this);
+    this->ui->setupUi(this);
 
     // load the font
     const QString font_family = QFontDatabase::applicationFontFamilies(
@@ -394,7 +394,7 @@ void MainWindow::Uninstall()
     }
 
     // remove the uninstaller
-    #if defined( Q_OS_LINUX ) || defined( Q_OS_BSD4 )
+    #if !defined( Q_OS_MACOS ) && (defined( Q_OS_LINUX ) || defined( Q_OS_BSD4 ))
         if ( ok ) {
             this->ui->progressBar_Uninstall->setValue( 95 );
             // on linux/bsd check if the uninstaller has been removed already
@@ -453,12 +453,12 @@ bool MainWindow::checkDatabases()
     this->ui->progressBar_Uninstall->setValue( 3 );
     if ( ! this->db_data_found ) {
         // path not found in the configs file (or configs file not found), check the default path
-        #if defined( Q_OS_LINUX ) || defined( Q_OS_BSD4 )
-            this->db_data_path = this->home_path + "/.local/share/LogDoctor/collection.db";
+        #if defined( Q_OS_MACOS )
+            this->db_data_path = this->data_path / "collection.db";
         #elif defined( Q_OS_WINDOWS )
             this->db_data_path = this->conf_path / "collection.db";
-        #elif defined( Q_OS_MACOS )
-            this->db_data_path = this->data_path / "collection.db";
+        #elif defined( Q_OS_LINUX ) || defined( Q_OS_BSD4 )
+            this->db_data_path = this->home_path + "/.local/share/LogDoctor/collection.db";
         #else
             throw( "LogDoctor: checkDatabases(): Unexpected OS");
         #endif
@@ -480,12 +480,12 @@ bool MainWindow::checkDatabases()
     this->ui->progressBar_Uninstall->setValue( 6 );
     if ( ! this->db_hashes_found ) {
         // path not found in the configs file (or configs file not found), check the default path
-        #if defined( Q_OS_LINUX ) || defined( Q_OS_BSD4 )
-            this->db_hashes_path = this->home_path + "/.local/share/LogDoctor/collection.db";
+        #if defined( Q_OS_MACOS )
+            this->db_hashes_path = this->data_path / "hashes.db";
         #elif defined( Q_OS_WINDOWS )
-            this->db_hashes_path = this->conf_path / "collection.db";
-        #elif defined( Q_OS_MACOS )
-            this->db_hashes_path = this->data_path / "collection.db";
+            this->db_hashes_path = this->conf_path / "hashes.db";
+        #elif defined( Q_OS_LINUX ) || defined( Q_OS_BSD4 )
+            this->db_hashes_path = this->home_path + "/.local/share/LogDoctor/hashes.db";
         #else
             throw( "LogDoctor: checkDatabases(): Unexpected OS");
         #endif
@@ -722,8 +722,8 @@ bool MainWindow::removeConfigfile()
                         }
                     }{
                         const std::filesystem::path path{ this->conf_path / "hashes.db" };
-                        if ( this->db_data_found ) {
-                            if ( this->db_data_path == path ) {
+                        if ( this->db_hashes_found ) {
+                            if ( this->db_hashes_path == path ) {
                                 db_found = true;
                             }
                         } else {
@@ -832,8 +832,8 @@ bool MainWindow::removeAppdata()
             }
             {
                 const std::filesystem::path path{ this->data_path / "hashes.db" };
-                if ( this->db_data_found ) {
-                    if ( this->db_data_path == path ) {
+                if ( this->db_hashes_found ) {
+                    if ( this->db_hashes_path == path ) {
                         db_found = true;
                         db_hashes_here = true;
                     }
@@ -938,7 +938,7 @@ bool MainWindow::removeExecutable()
 
     } else {
         // directory exists, check the executable file
-        #if defined( Q_OS_LINUX ) || defined( Q_OS_BSD4 )
+        #if !defined( Q_OS_MACOS ) && (defined( Q_OS_LINUX ) || defined( Q_OS_BSD4 ))
             // just remove the file
             const std::filesystem::path path{ this->exec_path / "logdoctor" };
             if ( ! std::filesystem::exists( path ) ) {
