@@ -21,7 +21,6 @@ class MainWindow : public QMainWindow
 
 public:
     MainWindow(QWidget *parent = nullptr);
-    ~MainWindow();
 
 private slots:
 
@@ -52,59 +51,55 @@ private slots:
     void on_button_Close_clicked();
 
 private:
-    Ui::MainWindow *ui;
+    QSharedPointer<Ui::MainWindow> ui;
 
     // operating system
     const std::string cleanPath( const QString& path );
-    // 1: linux, 2:windows, 3:mac
-    const std::string home_path = this->cleanPath( QStandardPaths::locate( QStandardPaths::HomeLocation, "", QStandardPaths::LocateDirectory ) );
-    #if defined( Q_OS_DARWIN )
-        // Darwin-based systems: macOS, macOS, iOS, watchOS and tvOS.
-        const unsigned int OS = 3;
-        const std::filesystem::path exec_path = "/Applications";
-        const std::filesystem::path conf_path = home_path + "/Lybrary/Preferences/LogDoctor";
-        const std::filesystem::path data_path = home_path + "/Lybrary/Application Support/LogDoctor";
-    #elif defined( Q_OS_WIN )
-        // Microsoft Windows systems
-        const unsigned int OS = 2;
-        const std::filesystem::path exec_path = home_path.substr(0,2) + "/Program Files";
-        const std::filesystem::path conf_path = home_path + "/AppData/Local/LogDoctor";
-        const std::filesystem::path data_path = home_path + "/AppData/Local/LogDoctor";
-    #elif defined( Q_OS_UNIX )
-        // Unix-like systems: Linux, BSD and SysV
-        const unsigned int OS = 1;
-        const std::filesystem::path exec_path = "/usr/bin";
-        const std::filesystem::path conf_path = home_path + "/.config/LogDoctor";
-        const std::filesystem::path data_path = "/usr/share/LogDoctor";
+
+    const std::string home_path{ this->cleanPath( QStandardPaths::locate( QStandardPaths::HomeLocation, "", QStandardPaths::LocateDirectory ) ) };
+    #if defined( Q_OS_MACOS )
+        const std::filesystem::path exec_path{ "/Applications" };
+        const std::filesystem::path conf_path{ home_path + "/Lybrary/Preferences/LogDoctor" };
+        const std::filesystem::path data_path{ home_path + "/Lybrary/Application Support/LogDoctor" };
+    #elif defined( Q_OS_WINDOWS )
+        const std::filesystem::path exec_path{ std::filesystem::path{home_path.substr(0,2) + "/Program Files"}.make_preferred() };
+        const std::filesystem::path conf_path{ std::filesystem::path{home_path + "/AppData/Local/LogDoctor"}.make_preferred() };
+        const std::filesystem::path data_path{ std::filesystem::path{home_path + "/AppData/Local/LogDoctor"}.make_preferred() };
+    #elif defined( Q_OS_LINUX ) || defined( Q_OS_BSD4 )
+        const std::filesystem::path exec_path{ "/usr/bin" };
+        const std::filesystem::path conf_path{ home_path + "/.config/LogDoctor" };
+        const std::filesystem::path data_path{ "/usr/share/LogDoctor" };
     #else
         #error "System not supported"
     #endif
 
     // language
     QTranslator translator;
-    std::string language = "en";
+    std::string language{ "en" };
     void updateUiLanguage();
 
     // work related
-    bool remove_config_file = false;
-    bool remove_databases   = false;
+    bool remove_config_file{ false };
+    bool remove_databases{   false };
     // db related
-    bool db_data_found   = false;
-    bool db_hashes_found = false;
+    bool db_data_found{   false };
+    bool db_hashes_found{ false };
     std::filesystem::path db_data_path;
     std::filesystem::path db_hashes_path;
     // resources
-    const std::vector<std::string> resources = {
+    const std::vector<std::string> resources{
         "licenses",
         "help" };
     // uninstall
-    QTimer* waiter_timer = new QTimer();
-    QTimer* uninstaller_timer = new QTimer();
+    QScopedPointer<QTimer> waiter_timer;
+    QScopedPointer<QTimer> uninstaller_timer;
     bool uninstalling;
     void startUninstalling();
     bool checkDatabases();
-    bool removeMenuEntry();
-    bool removeIcon();
+    #if !defined( Q_OS_MACOS )
+        bool removeMenuEntry();
+        bool removeIcon();
+    #endif
     bool removeDatabases();
     bool removeConfigfile();
     bool removeAppdata();
@@ -112,13 +107,14 @@ private:
     bool removeSelf();
 
     // for the configs
-    void readConfigs( std::filesystem::path& file_path );
-    void readFile( std::filesystem::path& path, std::string& output );
-    void splitrip( std::vector<std::string>& output, const std::string& input, const std::string& separator="\n" );
-    void split( std::vector<std::string>& output, const std::string& input, const std::string& separator );
-    void strip(  std::string& target, const std::string& chars=" \n\v\r\t\b" );
-    void lstrip( std::string& target, const std::string& chars );
-    void rstrip( std::string& target, const std::string& chars );
+    void readConfigs( const std::filesystem::path& file_path );
+    void readFile( const std::filesystem::path& path, std::string& output );
+    void splitrip( std::vector<std::string>& output, const std::string& input, std::string_view separator="\n" );
+    void split( std::vector<std::string>& output, const std::string& input, std::string_view separator );
+    std::string strip(  const std::string& target, std::string_view chars=" \n\v\r\t\b" );
+    std::string lstrip( const std::string& target, std::string_view chars );
+    std::string rstrip( const std::string& target, std::string_view chars );
+    size_t count( std::string_view str, std::string_view flag );
 };
 
 #endif // MAINWINDOW_H
